@@ -1,14 +1,15 @@
 #![recursion_limit = "256"]
 use near_token::NearToken;
+use near_workspaces::network::NetworkInfo;
 use serde_json::{Map, Value};
 use test_log::test;
 
-use std::fs::File;
+use std::fs::{self, File};
 use std::path::Path;
 
 #[test(tokio::test)]
 async fn test_subaccount_creation() -> anyhow::Result<()> {
-    let worker = near_workspaces::sandbox().await?;
+    let worker = near_workspaces::testnet().await?;
     let account = worker.dev_create_account().await?;
 
     let sub = account
@@ -32,6 +33,18 @@ async fn test_subaccount_creation() -> anyhow::Result<()> {
         Some(&Value::String(sub.id().to_string()))
     );
 
+    let res = worker
+        .delete_account(sub.id(), sub.signer(), &worker.info().root_id)
+        .await?;
+    assert!(res.is_success());
+
+    let res = worker
+        .delete_account(account.id(), account.signer(), &worker.info().root_id)
+        .await?;
+    assert!(res.is_success());
+
+    fs::remove_file(savedir.join(format!("{}.json", sub.id())))?;
+
     Ok(())
 }
 
@@ -41,8 +54,8 @@ async fn test_transfer_near() -> anyhow::Result<()> {
 
     let worker = near_workspaces::sandbox().await?;
     let (alice, bob) = (
-        worker.dev_create_account().await?,
-        worker.dev_create_account().await?,
+        worker.dev_create_tla().await?,
+        worker.dev_create_tla().await?,
     );
 
     assert_eq!(alice.view_account().await?.balance, INITIAL_BALANCE);
@@ -90,6 +103,7 @@ async fn test_delete_account() -> anyhow::Result<()> {
 
     // All sandbox accounts start with a balance of 100 NEAR tokens.
     // On account deletion, alice's balance is debited to bob as beneficiary.
+    println!("Bob's balance: {:?}", bob.view_account().await?.balance);
     assert!(bob.view_account().await?.balance > NearToken::from_near(100));
 
     Ok(())
